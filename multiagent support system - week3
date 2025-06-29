@@ -1,0 +1,40 @@
+from langgraph.graph import StateGraph
+from langchain.agents import Tool, initialize_agent
+from langchain.chat_models import ChatOpenAI
+
+# Define tools
+read_file_tool = Tool(name="ReadFile", func=read_internal_docs)
+web_search_tool = Tool(name="WebSearch", func=search_web)
+
+# Define agents
+llm = ChatOpenAI(model="gpt-4")
+
+it_agent = initialize_agent([read_file_tool, web_search_tool], llm, agent_type="openai-functions")
+finance_agent = initialize_agent([read_file_tool, web_search_tool], llm, agent_type="openai-functions")
+
+# Supervisor logic
+def supervisor_router(state):
+    query = state["query"].lower()
+    if any(keyword in query for keyword in ["vpn", "software", "network"]):
+        return "it_agent"
+    elif any(keyword in query for keyword in ["payroll", "reimbursement", "invoice"]):
+        return "finance_agent"
+    else:
+        return "fallback"
+
+# Build LangGraph
+graph = StateGraph()
+graph.add_node("supervisor", supervisor_router)
+graph.add_node("it_agent", it_agent)
+graph.add_node("finance_agent", finance_agent)
+
+graph.set_entry_point("supervisor")
+graph.add_edge("supervisor", "it_agent", condition=lambda s: supervisor_router(s) == "it_agent")
+graph.add_edge("supervisor", "finance_agent", condition=lambda s: supervisor_router(s) == "finance_agent")
+
+# Add fallback edges if needed
+graph.add_edge("it_agent", "fallback", condition=lambda s: not s.get("answer"))
+graph.add_edge("finance_agent", "fallback", condition=lambda s: not s.get("answer"))
+
+# Compile and run
+app = graph.compile()
