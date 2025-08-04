@@ -1,0 +1,20 @@
+function classifyNumber(number) {
+  // Define one billion for comparison
+  const ONE_BILLION = 1_000_000_000; // Using underscore separators for readability
+
+  // Use an if/else statement to compare the input number with ONE_BILLION
+  if (number >= ONE_BILLION) { // Using greater than or equal to for classification
+    return "Signature";
+  } else {
+    return "Vista";
+  }
+}
+
+// Example usage:
+const num1 = 1500000000; // 1.5 billion
+const num2 = 750000000; // 750 million
+const num3 = 1000000000; // exactly 1 billion
+
+console.log(classifyNumber(num1)); // Output: Signature.
+console.log(classifyNumber(num2)); // Output: Vista.
+console.log(classifyNumber(num3)); // Output: Signature.
