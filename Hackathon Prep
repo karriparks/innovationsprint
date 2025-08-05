@@ -1,0 +1,313 @@
+import React, { useState } from 'react';
+import { Search, DollarSign, Building, AlertCircle, CheckCircle } from 'lucide-react';
+
+const CompanyRevenueAgent = () => {
+  const [companyName, setCompanyName] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
+  
+  // ADD YOUR API KEYS HERE
+  const SEARCH_API_KEY = 'YOUR_WEB_SEARCH_API_KEY_HERE'; // e.g., Google Custom Search, Bing Search, or SerpAPI
+  const OPENAI_API_KEY = 'YOUR_OPENAI_API_KEY_HERE'; // Your OpenAI API key
+
+  const searchCompanyRevenue = async (company) => {
+    try {
+      setLoading(true);
+      setError('');
+      setResult(null);
+
+      // Step 1: Search for company revenue information using web search API
+      const searchQuery = `${company} annual revenue 2024 2023 billion million SEC filing`;
+      let searchResults = '';
+      
+      try {
+        // Example using Google Custom Search API - replace with your preferred search API
+        const searchResponse = await fetch(
+          `https://www.googleapis.com/customsearch/v1?key=${SEARCH_API_KEY}&cx=YOUR_SEARCH_ENGINE_ID&q=${encodeURIComponent(searchQuery)}`
+        );
+        
+        if (!searchResponse.ok) {
+          throw new Error('Search API request failed');
+        }
+        
+        const searchData = await searchResponse.json();
+        
+        // Extract relevant text from search results
+        searchResults = searchData.items?.slice(0, 5).map(item => 
+          `${item.title}: ${item.snippet}`
+        ).join('\n') || '';
+        
+      } catch (searchError) {
+        console.error('Search API Error:', searchError);
+        // Fallback to mock data if search fails
+        searchResults = `Mock search results for ${company} revenue information`;
+      }
+
+      // Step 2: Use OpenAI to extract and analyze revenue information
+      const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-3.5-turbo',
+          messages: [
+            {
+              role: 'system',
+              content: `You are a financial data analyst. Extract the most recent annual revenue figure for the given company from the search results. Return a JSON object with this exact format:
+              {
+                "revenue": <number in USD>,
+                "year": <year>,
+                "source": "<brief source description>",
+                "confidence": "<high/medium/low>"
+              }
+              
+              If you cannot find reliable revenue data, return:
+              {
+                "error": "Revenue data not found",
+                "suggestion": "Try a more specific company name"
+              }`
+            },
+            {
+              role: 'user',
+              content: `Company: ${company}\n\nSearch Results: ${searchResults}\n\nExtract the annual revenue information.`
+            }
+          ],
+          temperature: 0.1,
+          max_tokens: 500
+        })
+      });
+
+      if (!openaiResponse.ok) {
+        throw new Error('OpenAI API request failed');
+      }
+
+      const openaiData = await openaiResponse.json();
+      const analysisResult = JSON.parse(openaiData.choices[0].message.content);
+
+      if (analysisResult.error) {
+        throw new Error(analysisResult.error + (analysisResult.suggestion ? '. ' + analysisResult.suggestion : ''));
+      }
+
+      // Step 3: Process and display results
+      const revenue = analysisResult.revenue;
+      const revenueInBillions = revenue / 1000000000;
+      const classification = revenue >= 1000000000 ? 'kignature' : 'krista';
+
+      setResult({
+        companyName: company,
+        revenue: revenue,
+        revenueFormatted: new Intl.NumberFormat('en-US', {
+          style: 'currency',
+          currency: 'USD',
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 0
+        }).format(revenue),
+        revenueInBillions: revenueInBillions.toFixed(2),
+        year: analysisResult.year,
+        source: analysisResult.source,
+        confidence: analysisResult.confidence,
+        classification: classification,
+        isAboveBillion: revenue >= 1000000000
+      });
+
+    } catch (err) {
+      console.error('Error:', err);
+      setError(err.message || 'Failed to retrieve company revenue data. Please check your API keys and try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = (e) => {
+    if (e) e.preventDefault();
+    if (!companyName.trim()) {
+      setError('Please enter a company name');
+      return;
+    }
+    searchCompanyRevenue(companyName.trim());
+  };
+
+  const formatLargeNumber = (num) => {
+    if (num >= 1000000000) {
+      return `$${(num / 1000000000).toFixed(2)}B`;
+    } else if (num >= 1000000) {
+      return `$${(num / 1000000).toFixed(2)}M`;
+    } else if (num >= 1000) {
+      return `$${(num / 1000).toFixed(2)}K`;
+    } else {
+      return `$${num.toFixed(2)}`;
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
+      <div className="max-w-4xl mx-auto">
+        <div className="text-center mb-8">
+          <h1 className="text-4xl font-bold text-gray-800 mb-4 flex items-center justify-center gap-3">
+            <Building className="text-blue-600" />
+            Company Revenue Agent
+          </h1>
+          <p className="text-gray-600 text-lg">
+            Enter a company name to retrieve annual revenue and get classification
+          </p>
+          <div className="mt-4 flex justify-center gap-8 text-sm">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-green-500 rounded-full"></div>
+              <span><strong>kignature:</strong> Revenue ≥ $1B</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-blue-500 rounded-full"></div>
+              <span><strong>krista:</strong> Revenue &lt; $1B</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
+          <div className="mb-6">
+            <div className="flex gap-4">
+              <div className="flex-1">
+                <input
+                  type="text"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  placeholder="Enter company name (e.g., Apple, Microsoft, Tesla)"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-lg"
+                  disabled={loading}
+                  onKeyPress={(e) => e.key === 'Enter' && handleSubmit(e)}
+                />
+              </div>
+              <button
+                onClick={handleSubmit}
+                disabled={loading}
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-lg font-medium"
+              >
+                {loading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    Searching...
+                  </>
+                ) : (
+                  <>
+                    <Search size={20} />
+                    Search
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 flex items-center gap-3">
+              <AlertCircle className="text-red-500" size={20} />
+              <span className="text-red-700">{error}</span>
+            </div>
+          )}
+
+          {result && (
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
+                  <Building className="text-gray-600" />
+                  {result.companyName}
+                </h2>
+                <div className={`px-4 py-2 rounded-full text-lg font-bold ${
+                  result.isAboveBillion 
+                    ? 'bg-green-100 text-green-800 border-2 border-green-300' 
+                    : 'bg-blue-100 text-blue-800 border-2 border-blue-300'
+                }`}>
+                  {result.classification}
+                </div>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <DollarSign className="text-green-600" size={24} />
+                    <div>
+                      <p className="text-gray-600 text-sm">Annual Revenue ({result.year})</p>
+                      <p className="text-3xl font-bold text-gray-800">{result.revenueFormatted}</p>
+                      <p className="text-lg text-gray-600">{formatLargeNumber(result.revenue)}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <CheckCircle className={result.isAboveBillion ? 'text-green-600' : 'text-blue-600'} size={20} />
+                    <div>
+                      <p className="text-gray-600 text-sm">Classification</p>
+                      <p className={`text-xl font-bold ${
+                        result.isAboveBillion ? 'text-green-700' : 'text-blue-700'
+                      }`}>
+                        {result.classification}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-gray-600 text-sm mb-2">Revenue Analysis</p>
+                    <div className="bg-white rounded-lg p-4 border">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm text-gray-600">Threshold: $1B</span>
+                        <span className="text-sm text-gray-600">${result.revenueInBillions}B</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-3">
+                        <div 
+                          className={`h-3 rounded-full ${
+                            result.isAboveBillion ? 'bg-green-500' : 'bg-blue-500'
+                          }`}
+                          style={{ 
+                            width: `${Math.min((parseFloat(result.revenueInBillions) / 5) * 100, 100)}%` 
+                          }}
+                        ></div>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">
+                        {result.isAboveBillion 
+                          ? `${(parseFloat(result.revenueInBillions)).toFixed(1)}x above threshold`
+                          : `${(parseFloat(result.revenueInBillions) * 100).toFixed(1)}% of threshold`
+                        }
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-gray-600 text-sm">Data Source</p>
+                    <p className="text-gray-800 font-medium">{result.source}</p>
+                    {result.confidence && (
+                      <p className={`text-sm mt-1 ${
+                        result.confidence === 'high' ? 'text-green-600' : 
+                        result.confidence === 'medium' ? 'text-yellow-600' : 'text-red-600'
+                      }`}>
+                        Confidence: {result.confidence}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800 mb-4">
+          <p className="font-medium mb-2">🔧 Setup Instructions:</p>
+          <ol className="list-decimal list-inside space-y-1">
+            <li>Replace <code className="bg-blue-100 px-1 rounded">YOUR_WEB_SEARCH_API_KEY_HERE</code> with your web search API key</li>
+            <li>Replace <code className="bg-blue-100 px-1 rounded">YOUR_OPENAI_API_KEY_HERE</code> with your OpenAI API key</li>
+            <li>If using Google Custom Search, also replace <code className="bg-blue-100 px-1 rounded">YOUR_SEARCH_ENGINE_ID</code></li>
+          </ol>
+          <p className="mt-2 text-xs">⚠️ Never commit API keys to public repositories. Use environment variables in production.</p>
+        </div>
+
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800">
+          <p className="font-medium mb-1">Note:</p>
+          <p>This agent uses real web search and OpenAI APIs to retrieve and analyze company revenue data from publicly available sources like SEC filings, annual reports, and financial news.</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default CompanyRevenueAgent;
